@@ -11,17 +11,23 @@
       width: 100vw;
       height: 100vh;
       object-fit: cover;
-      transform: scaleX(-1); /* espejo */
+      transform: scaleX(-1);
     }
-    #feedback {
+    #feedback, #controls {
       position: absolute;
-      top: 20px;
-      left: 20px;
       background: rgba(0, 0, 0, 0.6);
       color: white;
+      font-family: sans-serif;
       padding: 10px;
       border-radius: 8px;
-      font-family: sans-serif;
+    }
+    #feedback {
+      top: 20px;
+      left: 20px;
+    }
+    #controls {
+      bottom: 20px;
+      left: 20px;
     }
     #recordBtn {
       position: absolute;
@@ -32,18 +38,26 @@
       cursor: pointer;
       z-index: 10;
     }
+    input[type="range"] {
+      width: 150px;
+    }
   </style>
 </head>
 <body>
   <video id="input_video" autoplay muted playsinline></video>
   <canvas id="output_canvas"></canvas>
+
   <div id="feedback">Esperando postura...</div>
+  <div id="controls">
+    Tolerancia: <span id="toleranceValue">0.2</span><br>
+    <input type="range" id="toleranceSlider" min="0.01" max="1" step="0.01" value="0.2">
+  </div>
   <button id="recordBtn">Grabar postura</button>
 
   <!-- MediaPipe Pose clásico -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.min.js"></script>
 
   <script>
     const videoElement = document.getElementById('input_video');
@@ -51,18 +65,25 @@
     const canvasCtx = canvasElement.getContext('2d');
     const feedback = document.getElementById('feedback');
     const recordBtn = document.getElementById('recordBtn');
+    const toleranceSlider = document.getElementById('toleranceSlider');
+    const toleranceValue = document.getElementById('toleranceValue');
 
     canvasElement.width = 1280;
     canvasElement.height = 720;
 
     let recordedPose = null;
-    const tolerance = 0.2; // Ajusta esto para hacerlo más laxo o estricto
+    let tolerance = parseFloat(toleranceSlider.value);
+
+    toleranceSlider.addEventListener('input', () => {
+      tolerance = parseFloat(toleranceSlider.value);
+      toleranceValue.textContent = tolerance.toFixed(2);
+    });
 
     function normalizeLandmarks(landmarks) {
       const center = landmarks[0]; // nariz
       return landmarks.map(lm => ({
-        x: (lm.x - center.x),
-        y: (lm.y - center.y)
+        x: lm.x - center.x,
+        y: lm.y - center.y
       }));
     }
 
@@ -132,7 +153,7 @@
           recordedPose = normalizeLandmarks(results.poseLandmarks);
           feedback.innerText = "📌 Postura grabada con éxito";
         }
-        pose.onResults(onResults); // restaura función original
+        pose.onResults(onResults); // restaurar
       });
     });
   </script>
