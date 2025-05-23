@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Detector de Postura</title>
+  <style>
+    canvas, video {
+      position: absolute;
+      left: 0;
+      top: 0;
+    }
+  </style>
+</head>
+<body>
+  <video id="video" playsinline style="transform: scaleX(-1);" width="640" height="480"></video>
+  <canvas id="output" width="640" height="480"></canvas>
+
+  <!-- Scripts de MediaPipe -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('output');
+    const ctx = canvas.getContext('2d');
+
+    const pose = new Pose.Pose({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    });
+
+    pose.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      enableSegmentation: false,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    pose.onResults(results => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (results.poseLandmarks) {
+        DrawingUtils.drawConnectors(ctx, results.poseLandmarks, Pose.POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
+        DrawingUtils.drawLandmarks(ctx, results.poseLandmarks, { color: '#FF0000', radius: 2 });
+      }
+    });
+
+    async function initCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+      await video.play();
+
+      function detect() {
+        pose.send({ image: video });
+        requestAnimationFrame(detect);
+      }
+
+      detect();
+    }
+
+    initCamera();
+  </script>
+</body>
+</html>
