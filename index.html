@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Pose Tracker</title>
+  <title>Detección de Postura</title>
   <style>
     body { margin: 0; overflow: hidden; }
     video, canvas {
@@ -15,10 +15,10 @@
     }
     #btn-grabar {
       position: absolute;
-      z-index: 10;
       top: 10px;
       left: 10px;
-      padding: 10px 20px;
+      z-index: 10;
+      padding: 10px;
       font-size: 18px;
     }
     #estado {
@@ -26,7 +26,7 @@
       top: 10px;
       right: 10px;
       z-index: 10;
-      background: rgba(0,0,0,0.5);
+      background: rgba(0, 0, 0, 0.6);
       color: white;
       padding: 10px;
       font-size: 18px;
@@ -39,10 +39,10 @@
   <button id="btn-grabar">Grabar Postura</button>
   <div id="estado">Esperando...</div>
 
-  <!-- MediaPipe clásico -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <!-- MediaPipe Clásico -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.min.js"></script>
 
   <script>
     const videoElement = document.getElementById('input_video');
@@ -51,11 +51,11 @@
     const btnGrabar = document.getElementById('btn-grabar');
     const estado = document.getElementById('estado');
 
-    canvasElement.width = 1280;
-    canvasElement.height = 720;
-
     let posturaGrabada = null;
     let ultimaPostura = null;
+
+    canvasElement.width = 1280;
+    canvasElement.height = 720;
 
     function calcularDiferencia(ref, actual) {
       let suma = 0;
@@ -72,8 +72,8 @@
       return suma / count;
     }
 
-    const pose = new Pose({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    const pose = new Pose.Pose({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/${file}`
     });
 
     pose.setOptions({
@@ -92,7 +92,7 @@
       if (results.poseLandmarks) {
         ultimaPostura = results.poseLandmarks;
 
-        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {
+        drawConnectors(canvasCtx, results.poseLandmarks, Pose.POSE_CONNECTIONS, {
           color: '#00FF00', lineWidth: 2
         });
         drawLandmarks(canvasCtx, results.poseLandmarks, {
@@ -103,10 +103,10 @@
           const diferencia = calcularDiferencia(posturaGrabada, results.poseLandmarks);
           if (diferencia < 0.001) {
             estado.innerText = '✅ Postura correcta';
-            estado.style.background = 'rgba(0, 128, 0, 0.6)';
+            estado.style.background = 'rgba(0,128,0,0.6)';
           } else {
             estado.innerText = '❌ Postura incorrecta';
-            estado.style.background = 'rgba(128, 0, 0, 0.6)';
+            estado.style.background = 'rgba(128,0,0,0.6)';
           }
         }
       }
@@ -114,7 +114,7 @@
       canvasCtx.restore();
     });
 
-    const camera = new Camera(videoElement, {
+    const camera = new Camera.Camera(videoElement, {
       onFrame: async () => {
         await pose.send({ image: videoElement });
       },
@@ -128,7 +128,7 @@
       if (ultimaPostura) {
         posturaGrabada = structuredClone(ultimaPostura);
         estado.innerText = '📸 Postura grabada';
-        estado.style.background = 'rgba(0, 0, 128, 0.6)';
+        estado.style.background = 'rgba(0,0,128,0.6)';
       }
     });
   </script>
