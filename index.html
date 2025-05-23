@@ -1,6 +1,25 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Postura con MediaPipe</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    video, canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100vw;
+      height: 100vh;
+      transform: scaleX(-1); /* espejo para parecerse a un reflejo */
+    }
+  </style>
+</head>
 <body>
-  <video id="video" width="640" height="480" autoplay muted playsinline></video>
-  <canvas id="canvas" width="640" height="480"></canvas>
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="canvas"></canvas>
 
   <script type="module">
     window.onload = async () => {
@@ -8,15 +27,24 @@
       const canvas = document.getElementById("canvas");
       const ctx = canvas.getContext("2d");
 
+      // Asegura que el canvas se adapte al tamaño del video
+      function resizeCanvas() {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+      }
+
+      // Importa MediaPipe Tasks
       const { PoseLandmarker, FilesetResolver, DrawingUtils } = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3");
 
+      // Carga los archivos necesarios
       const vision = await FilesetResolver.forVisionTasks(
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
       );
 
+      // Carga del modelo correcto (float32, no float16)
       const poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
         baseOptions: {
-          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/lite/float16/pose_landmarker.task"
+          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/lite/float32/pose_landmarker.task"
         },
         runningMode: "VIDEO",
         numPoses: 1
@@ -24,29 +52,30 @@
 
       const drawingUtils = new DrawingUtils(ctx);
 
+      // Acceso a la cámara
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       video.srcObject = stream;
+
       video.onloadedmetadata = () => {
         video.play();
-        detect();
+        resizeCanvas();
+        processVideo();
       };
 
-      function detect() {
-        const process = () => {
-          const nowInMs = performance.now();
-          const results = poseLandmarker.detectForVideo(video, nowInMs);
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
+      function processVideo() {
+        const nowInMs = performance.now();
+        const results = poseLandmarker.detectForVideo(video, nowInMs);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-          if (results.landmarks.length > 0) {
-            for (const landmark of results.landmarks[0]) {
-              drawingUtils.drawLandmarks(landmark);
-            }
+        if (results.landmarks.length > 0) {
+          for (const landmark of results.landmarks[0]) {
+            drawingUtils.drawLandmarks(landmark);
           }
+        }
 
-          requestAnimationFrame(process);
-        };
-        process();
+        requestAnimationFrame(processVideo);
       }
     };
   </script>
 </body>
+</html>
