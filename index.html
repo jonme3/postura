@@ -1,68 +1,83 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Detección de Postura con MediaPipe</title>
+  <meta charset="UTF-8" />
+  <title>Detección de Postura</title>
   <style>
-    video, canvas {
+    body { margin: 0; overflow: hidden; }
+    canvas, video {
       position: absolute;
-      left: 0;
-      top: 0;
-      width: 100vw;
-      height: 100vh;
-      transform: scaleX(-1);
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      object-fit: cover;
     }
   </style>
 </head>
 <body>
-  <video class="input_video"></video>
-  <canvas class="output_canvas"></canvas>
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="canvas"></canvas>
 
-  <!-- MediaPipe Pose -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469400/pose.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 
   <script>
-    const videoElement = document.getElementsByClassName('input_video')[0];
-    const canvasElement = document.getElementsByClassName('output_canvas')[0];
-    const canvasCtx = canvasElement.getContext('2d');
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
 
-    function onResults(results) {
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      canvasCtx.drawImage(
-          results.image, 0, 0, canvasElement.width, canvasElement.height);
-      if (results.poseLandmarks) {
-        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS,
-                       {color: '#00FF00', lineWidth: 4});
-        drawLandmarks(canvasCtx, results.poseLandmarks,
-                      {color: '#FF0000', lineWidth: 2});
-      }
-      canvasCtx.restore();
+    async function startCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      });
+      video.srcObject = stream;
+
+      video.addEventListener('loadedmetadata', () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+      });
     }
 
-    const pose = new Pose({
-      locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/${file}`;
-      }
+    const pose = new Pose.Pose({
+      locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469400/${file}`
     });
+
     pose.setOptions({
       modelComplexity: 1,
       smoothLandmarks: true,
       enableSegmentation: false,
+      smoothSegmentation: false,
       minDetectionConfidence: 0.5,
       minTrackingConfidence: 0.5
     });
-    pose.onResults(onResults);
 
-    const camera = new Camera(videoElement, {
+    pose.onResults(results => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+      if (results.poseLandmarks) {
+        drawConnectors(ctx, results.poseLandmarks, Pose.POSE_CONNECTIONS, {
+          color: '#00FF00',
+          lineWidth: 2
+        });
+        drawLandmarks(ctx, results.poseLandmarks, {
+          color: '#FF0000',
+          radius: 1.5
+        });
+      }
+    });
+
+    const camera = new Camera(video, {
       onFrame: async () => {
-        await pose.send({image: videoElement});
+        await pose.send({ image: video });
       },
       width: 1280,
       height: 720
     });
+
+    startCamera();
     camera.start();
   </script>
 </body>
