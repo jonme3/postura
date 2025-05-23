@@ -1,48 +1,79 @@
-<script>
-  const videoElement = document.getElementById('video');
-  const canvasElement = document.getElementById('canvas');
-  const canvasCtx = canvasElement.getContext('2d');
-
-  const pose = new Pose({
-    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/${file}`
-  });
-
-  pose.setOptions({
-    modelComplexity: 1,
-    smoothLandmarks: true,
-    enableSegmentation: false,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5
-  });
-
-  pose.onResults((results) => {
-    canvasCtx.save();
-    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-    if (results.poseLandmarks) {
-      drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
-      drawLandmarks(canvasCtx, results.poseLandmarks, { color: '#FF0000', radius: 3 });
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Postura con MediaPipe Tasks</title>
+  <style>
+    video, canvas {
+      position: absolute;
+      top: 0; left: 0;
+      transform: scaleX(-1);
     }
-    canvasCtx.restore();
-  });
+  </style>
+</head>
+<body>
+  <video id="video" width="640" height="480" autoplay muted playsinline></video>
+  <canvas id="canvas" width="640" height="480"></canvas>
 
-  async function startCamera() {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    videoElement.srcObject = stream;
+  <!-- MediaPipe Tasks via CDN -->
+  <script type="module">
+    import {
+      PoseLandmarker,
+      FilesetResolver,
+      DrawingUtils
+    } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
 
-    // Esperar a que el video esté listo
-    videoElement.onloadedmetadata = () => {
-      videoElement.play();
-      detect(); // Llamar después de que comience a reproducir
-    };
-  }
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const drawingUtils = new DrawingUtils(ctx);
 
-  function detect() {
-    const process = async () => {
-      await pose.send({ image: videoElement });
-      requestAnimationFrame(process);
-    };
-    process();
-  }
+    let poseLandmarker;
+    let running = true;
 
-  startCamera();
-</script>
+    async function init() {
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+      );
+
+      poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/lite/float16/pose_landmarker.task"
+        },
+        runningMode: "VIDEO",
+        numPoses: 1
+      });
+
+      startCamera();
+    }
+
+    async function startCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+
+      video.onloadedmetadata = () => {
+        video.play();
+        processVideo();
+      };
+    }
+
+    async function processVideo() {
+      if (!running) return;
+      const nowInMs = performance.now();
+      const results = poseLandmarker.detectForVideo(video, nowInMs);
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (results.landmarks.length > 0) {
+        for (const landmark of results.landmarks[0]) {
+          drawingUtils.drawLandmarks(landmark);
+        }
+      }
+
+      requestAnimationFrame(processVideo);
+    }
+
+    init();
+  </script>
+</body>
+</html>
