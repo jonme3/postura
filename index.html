@@ -12,9 +12,26 @@
       height: 100vh;
       object-fit: cover;
     }
+    #recordBtn {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    #recordBtn:active {
+      background-color: #218838;
+    }
   </style>
 </head>
 <body>
+  <button id="recordBtn">Grabar Postura</button>
   <video id="input_video" autoplay muted playsinline></video>
   <canvas id="output_canvas"></canvas>
 
@@ -27,9 +44,21 @@
     const videoElement = document.getElementById('input_video');
     const canvasElement = document.getElementById('output_canvas');
     const canvasCtx = canvasElement.getContext('2d');
+    const recordBtn = document.getElementById('recordBtn');
 
     canvasElement.width = 1280;
     canvasElement.height = 720;
+
+    let referencia = null;
+
+    recordBtn.onclick = () => {
+      if (últimaPostura) {
+        referencia = JSON.parse(JSON.stringify(últimaPostura));
+        alert("Postura grabada");
+      }
+    };
+
+    let últimaPostura = null;
 
     const pose = new Pose({
       locateFile: (file) => {
@@ -51,16 +80,39 @@
       canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
       if (results.poseLandmarks) {
+        últimaPostura = results.poseLandmarks;
+
         drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {
-          color: '#00FF00', lineWidth: 2
+          color: referencia ? '#0000FF' : '#00FF00', lineWidth: 2
         });
+
         drawLandmarks(canvasCtx, results.poseLandmarks, {
           color: '#FF0000', radius: 1.5
         });
+
+        if (referencia) {
+          // Puedes comparar aquí con la referencia
+          const diferencia = calcularDiferencia(referencia, results.poseLandmarks);
+          if (diferencia < 0.1) {
+            canvasCtx.fillStyle = "rgba(0,255,0,0.7)";
+            canvasCtx.font = "40px Arial";
+            canvasCtx.fillText("¡Postura correcta!", 50, 80);
+          }
+        }
       }
 
       canvasCtx.restore();
     });
+
+    function calcularDiferencia(ref, actual) {
+      let suma = 0;
+      for (let i = 0; i < ref.length; i++) {
+        const dx = ref[i].x - actual[i].x;
+        const dy = ref[i].y - actual[i].y;
+        suma += dx * dx + dy * dy;
+      }
+      return suma / ref.length;
+    }
 
     const camera = new Camera(videoElement, {
       onFrame: async () => {
