@@ -1,83 +1,75 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <title>Detección de Postura</title>
+  <meta charset="UTF-8">
+  <title>Pose Tracker</title>
   <style>
     body { margin: 0; overflow: hidden; }
-    canvas, video {
+    video, canvas {
       position: absolute;
       top: 0; left: 0;
-      width: 100vw; height: 100vh;
+      width: 100vw;
+      height: 100vh;
       object-fit: cover;
     }
   </style>
 </head>
 <body>
-  <video id="video" autoplay playsinline muted></video>
-  <canvas id="canvas"></canvas>
+  <video id="input_video" autoplay muted playsinline></video>
+  <canvas id="output_canvas"></canvas>
 
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469400/pose.js"></script>
+  <!-- MediaPipe clásico -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
   <script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
 
-    async function startCamera() {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
-      });
-      video.srcObject = stream;
-
-      video.addEventListener('loadedmetadata', () => {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-      });
-    }
+    canvasElement.width = 1280;
+    canvasElement.height = 720;
 
     const pose = new Pose.Pose({
-      locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469400/${file}`
+      locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+      }
     });
 
     pose.setOptions({
       modelComplexity: 1,
       smoothLandmarks: true,
       enableSegmentation: false,
-      smoothSegmentation: false,
       minDetectionConfidence: 0.5,
       minTrackingConfidence: 0.5
     });
 
-    pose.onResults(results => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+    pose.onResults((results) => {
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
       if (results.poseLandmarks) {
-        drawConnectors(ctx, results.poseLandmarks, Pose.POSE_CONNECTIONS, {
-          color: '#00FF00',
-          lineWidth: 2
+        drawConnectors(canvasCtx, results.poseLandmarks, Pose.POSE_CONNECTIONS, {
+          color: '#00FF00', lineWidth: 2
         });
-        drawLandmarks(ctx, results.poseLandmarks, {
-          color: '#FF0000',
-          radius: 1.5
+        drawLandmarks(canvasCtx, results.poseLandmarks, {
+          color: '#FF0000', radius: 1.5
         });
       }
+
+      canvasCtx.restore();
     });
 
-    const camera = new Camera(video, {
+    const camera = new Camera(videoElement, {
       onFrame: async () => {
-        await pose.send({ image: video });
+        await pose.send({ image: videoElement });
       },
       width: 1280,
       height: 720
     });
 
-    startCamera();
     camera.start();
   </script>
 </body>
