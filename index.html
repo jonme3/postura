@@ -2,77 +2,63 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Detección de Postura</title>
+  <title>Postura MediaPipe</title>
   <style>
-    body { margin: 0; overflow: hidden; }
+    body { margin: 0; overflow: hidden; font-family: sans-serif; }
     video, canvas {
       position: absolute;
       top: 0; left: 0;
       width: 100vw;
       height: 100vh;
-      object-fit: cover;
       transform: scaleX(-1);
+      object-fit: cover;
     }
-    #btn-grabar {
+    #controls {
       position: absolute;
       top: 10px;
       left: 10px;
       z-index: 10;
+      background: rgba(255, 255, 255, 0.8);
       padding: 10px;
-      font-size: 18px;
+      border-radius: 8px;
     }
     #estado {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      z-index: 10;
-      background: rgba(0, 0, 0, 0.6);
-      color: white;
-      padding: 10px;
-      font-size: 18px;
+      font-weight: bold;
+      margin-top: 5px;
     }
   </style>
 </head>
 <body>
   <video id="input_video" autoplay muted playsinline></video>
   <canvas id="output_canvas"></canvas>
-  <button id="btn-grabar">Grabar Postura</button>
-  <div id="estado">Esperando...</div>
 
-  <!-- MediaPipe Clásico -->
+  <div id="controls">
+    <button id="grabarBtn">Grabar Postura</button>
+    <label>
+      Tolerancia:
+      <input type="range" id="tolerancia" min="0.01" max="0.3" step="0.01" value="0.1">
+    </label>
+    <div id="estado">Esperando...</div>
+  </div>
+
+  <!-- Scripts MediaPipe -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.min.js"></script>
 
   <script>
     const videoElement = document.getElementById('input_video');
     const canvasElement = document.getElementById('output_canvas');
     const canvasCtx = canvasElement.getContext('2d');
-    const btnGrabar = document.getElementById('btn-grabar');
-    const estado = document.getElementById('estado');
+    const estadoElem = document.getElementById('estado');
+    const toleranciaInput = document.getElementById('tolerancia');
 
     let posturaGrabada = null;
-    let ultimaPostura = null;
 
     canvasElement.width = 1280;
     canvasElement.height = 720;
 
-    function calcularDiferencia(ref, actual) {
-      let suma = 0;
-      let count = 0;
-      for (let i = 0; i < ref.length; i++) {
-        if (ref[i].visibility < 0.5 || actual[i].visibility < 0.5) continue;
-        const dx = ref[i].x - actual[i].x;
-        const dy = ref[i].y - actual[i].y;
-        const dz = ref[i].z - actual[i].z;
-        suma += dx * dx + dy * dy + dz * dz;
-        count++;
-      }
-      if (count === 0) return Infinity;
-      return suma / count;
-    }
-
-    const pose = new Pose.Pose({
+    const pose = new Pose({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/${file}`
     });
 
@@ -90,9 +76,7 @@
       canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
       if (results.poseLandmarks) {
-        ultimaPostura = results.poseLandmarks;
-
-        drawConnectors(canvasCtx, results.poseLandmarks, Pose.POSE_CONNECTIONS, {
+        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {
           color: '#00FF00', lineWidth: 2
         });
         drawLandmarks(canvasCtx, results.poseLandmarks, {
@@ -100,21 +84,16 @@
         });
 
         if (posturaGrabada) {
-          const diferencia = calcularDiferencia(posturaGrabada, results.poseLandmarks);
-          if (diferencia < 1) {
-            estado.innerText = '✅ Postura correcta';
-            estado.style.background = 'rgba(0,128,0,0.6)';
-          } else {
-            estado.innerText = '❌ Postura incorrecta';
-            estado.style.background = 'rgba(128,0,0,0.6)';
-          }
+          const diff = calcularDiferencia(posturaGrabada, results.poseLandmarks);
+          const tolerancia = parseFloat(toleranciaInput.value);
+          estadoElem.textContent = diff < tolerancia ? "✔️ Postura Correcta" : "❌ Postura Incorrecta";
         }
       }
 
       canvasCtx.restore();
     });
 
-    const camera = new Camera.Camera(videoElement, {
+    const camera = new Camera(videoElement, {
       onFrame: async () => {
         await pose.send({ image: videoElement });
       },
@@ -124,13 +103,53 @@
 
     camera.start();
 
-    btnGrabar.addEventListener('click', () => {
-      if (ultimaPostura) {
-        posturaGrabada = structuredClone(ultimaPostura);
-        estado.innerText = '📸 Postura grabada';
-        estado.style.background = 'rgba(0,0,128,0.6)';
+    // Grabar postura al hacer clic
+    document.getElementById('grabarBtn').addEventListener('click', () => {
+      if (lastLandmarks) {
+        posturaGrabada = lastLandmarks.map(p => ({ x: p.x, y: p.y, z: p.z }));
+        estadoElem.textContent = "📸 Postura grabada";
       }
     });
+
+    // Últimos landmarks detectados
+    let lastLandmarks = null;
+
+    pose.onResults((results) => {
+      lastLandmarks = results.poseLandmarks;
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.poseLandmarks) {
+        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {
+          color: '#00FF00', lineWidth: 2
+        });
+        drawLandmarks(canvasCtx, results.poseLandmarks, {
+          color: '#FF0000', radius: 2
+        });
+
+        if (posturaGrabada) {
+          const diff = calcularDiferencia(posturaGrabada, results.poseLandmarks);
+          const tolerancia = parseFloat(toleranciaInput.value);
+          estadoElem.textContent = diff < tolerancia ? "✔️ Postura Correcta" : "❌ Postura Incorrecta";
+        }
+      }
+
+      canvasCtx.restore();
+    });
+
+    // Calcular diferencia entre dos posturas
+    function calcularDiferencia(p1, p2) {
+      if (!p1 || !p2 || p1.length !== p2.length) return Infinity;
+      let total = 0;
+      for (let i = 0; i < p1.length; i++) {
+        const dx = p1[i].x - p2[i].x;
+        const dy = p1[i].y - p2[i].y;
+        const dz = (p1[i].z || 0) - (p2[i].z || 0);
+        total += dx * dx + dy * dy + dz * dz;
+      }
+      return Math.sqrt(total / p1.length);
+    }
   </script>
 </body>
 </html>
