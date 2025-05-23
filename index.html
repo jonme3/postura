@@ -1,52 +1,42 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Detección de Postura con MediaPipe</title>
+  <title>Pose Tracker</title>
   <style>
+    body { margin: 0; overflow: hidden; }
     video, canvas {
       position: absolute;
-      left: 0;
-      top: 0;
+      top: 0; left: 0;
       width: 100vw;
       height: 100vh;
-      transform: scaleX(-1);
+      object-fit: cover;
     }
   </style>
 </head>
 <body>
-  <video class="input_video"></video>
-  <canvas class="output_canvas"></canvas>
+  <video id="input_video" autoplay muted playsinline></video>
+  <canvas id="output_canvas"></canvas>
 
-  <!-- MediaPipe Pose -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.min.js"></script>
+  <!-- MediaPipe clásico -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
   <script>
-    const videoElement = document.getElementsByClassName('input_video')[0];
-    const canvasElement = document.getElementsByClassName('output_canvas')[0];
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('output_canvas');
     const canvasCtx = canvasElement.getContext('2d');
 
-    function onResults(results) {
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      canvasCtx.drawImage(
-          results.image, 0, 0, canvasElement.width, canvasElement.height);
-      if (results.poseLandmarks) {
-        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS,
-                       {color: '#00FF00', lineWidth: 4});
-        drawLandmarks(canvasCtx, results.poseLandmarks,
-                      {color: '#FF0000', lineWidth: 2});
-      }
-      canvasCtx.restore();
-    }
+    canvasElement.width = 1280;
+    canvasElement.height = 720;
 
     const pose = new Pose({
       locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/${file}`;
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
       }
     });
+
     pose.setOptions({
       modelComplexity: 1,
       smoothLandmarks: true,
@@ -54,15 +44,32 @@
       minDetectionConfidence: 0.5,
       minTrackingConfidence: 0.5
     });
-    pose.onResults(onResults);
+
+    pose.onResults((results) => {
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.poseLandmarks) {
+        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {
+          color: '#00FF00', lineWidth: 2
+        });
+        drawLandmarks(canvasCtx, results.poseLandmarks, {
+          color: '#FF0000', radius: 1.5
+        });
+      }
+
+      canvasCtx.restore();
+    });
 
     const camera = new Camera(videoElement, {
       onFrame: async () => {
-        await pose.send({image: videoElement});
+        await pose.send({ image: videoElement });
       },
       width: 1280,
       height: 720
     });
+
     camera.start();
   </script>
 </body>
