@@ -2,44 +2,45 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Detector de Postura</title>
+  <title>Postura con MediaPipe</title>
   <style>
-    body { margin: 0; overflow: hidden; font-family: sans-serif; }
+    body { margin: 0; overflow: hidden; }
     video, canvas {
       position: absolute;
       top: 0; left: 0;
       width: 100vw;
       height: 100vh;
       object-fit: cover;
-      transform: scaleX(-1);
-    }
-    #controls {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      background: rgba(255, 255, 255, 0.8);
-      padding: 10px;
-      border-radius: 10px;
-      z-index: 10;
+      transform: scaleX(-1); /* espejo */
     }
     #feedback {
-      margin-top: 5px;
-      font-weight: bold;
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.6);
+      color: white;
+      padding: 10px;
+      border-radius: 8px;
+      font-family: sans-serif;
+    }
+    #recordBtn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      padding: 10px 15px;
+      font-size: 16px;
+      cursor: pointer;
+      z-index: 10;
     }
   </style>
 </head>
 <body>
   <video id="input_video" autoplay muted playsinline></video>
   <canvas id="output_canvas"></canvas>
-  <div id="controls">
-    <button id="save_pose_btn">📸 Grabar Postura</button><br>
-    <label for="threshold">Tolerancia:</label>
-    <input type="range" id="threshold" min="0.01" max="0.2" step="0.01" value="0.1">
-    <span id="threshold_value">0.10</span>
-    <div id="feedback">🎥 Observando...</div>
-  </div>
+  <div id="feedback">Esperando postura...</div>
+  <button id="recordBtn">Grabar postura</button>
 
-  <!-- Scripts de MediaPipe clásico -->
+  <!-- MediaPipe Pose clásico -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.min.js"></script>
@@ -48,54 +49,59 @@
     const videoElement = document.getElementById('input_video');
     const canvasElement = document.getElementById('output_canvas');
     const canvasCtx = canvasElement.getContext('2d');
-    const saveBtn = document.getElementById('save_pose_btn');
     const feedback = document.getElementById('feedback');
-    const thresholdSlider = document.getElementById('threshold');
-    const thresholdValue = document.getElementById('threshold_value');
+    const recordBtn = document.getElementById('recordBtn');
 
     canvasElement.width = 1280;
     canvasElement.height = 720;
 
-    let savedPose = null;
-    let lastPose = null;
+    let recordedPose = null;
+    const tolerance = 0.2; // Ajusta esto para hacerlo más laxo o estricto
 
-    thresholdSlider.addEventListener('input', () => {
-      thresholdValue.textContent = parseFloat(thresholdSlider.value).toFixed(2);
-    });
-
-    saveBtn.addEventListener('click', () => {
-      if (lastPose) {
-        savedPose = JSON.parse(JSON.stringify(lastPose)); // Copia profunda
-        feedback.textContent = '✅ Postura grabada';
-      } else {
-        feedback.textContent = '⚠️ No se ha detectado una postura aún';
-      }
-    });
-
-    function comparePostures(pose1, pose2) {
-      const threshold = parseFloat(thresholdSlider.value);
-      let totalDiff = 0;
-      let count = 0;
-
-      for (let i = 0; i < pose1.length; i++) {
-        const p1 = pose1[i];
-        const p2 = pose2[i];
-        if (p1.visibility < 0.5 || p2.visibility < 0.5) continue;
-
-        const dx = p1.x - p2.x;
-        const dy = p1.y - p2.y;
-        const dz = p1.z - p2.z;
-        const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-        totalDiff += dist;
-        count++;
-      }
-
-      if (count === 0) return false;
-      const avgDiff = totalDiff / count;
-      return avgDiff < threshold;
+    function normalizeLandmarks(landmarks) {
+      const center = landmarks[0]; // nariz
+      return landmarks.map(lm => ({
+        x: (lm.x - center.x),
+        y: (lm.y - center.y)
+      }));
     }
 
-    const pose = new Pose.Pose({
+    function compareLandmarks(pose1, pose2) {
+      if (!pose1 || !pose2 || pose1.length !== pose2.length) return false;
+      for (let i = 0; i < pose1.length; i++) {
+        const dx = pose1[i].x - pose2[i].x;
+        const dy = pose1[i].y - pose2[i].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > tolerance) return false;
+      }
+      return true;
+    }
+
+    function onResults(results) {
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.poseLandmarks) {
+        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {
+          color: '#00FF00', lineWidth: 2
+        });
+        drawLandmarks(canvasCtx, results.poseLandmarks, {
+          color: '#FF0000', radius: 3
+        });
+
+        const currentNormalized = normalizeLandmarks(results.poseLandmarks);
+
+        if (recordedPose) {
+          const isMatch = compareLandmarks(currentNormalized, recordedPose);
+          feedback.innerText = isMatch ? "✅ Postura correcta" : "❌ Postura incorrecta";
+          feedback.style.background = isMatch ? "rgba(0,128,0,0.6)" : "rgba(128,0,0,0.6)";
+        }
+      }
+      canvasCtx.restore();
+    }
+
+    const pose = new Pose({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/${file}`
     });
 
@@ -107,33 +113,7 @@
       minTrackingConfidence: 0.5
     });
 
-    pose.onResults((results) => {
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-
-      lastPose = results.poseLandmarks;
-
-      if (results.poseLandmarks) {
-        const isCorrect = savedPose ? comparePostures(results.poseLandmarks, savedPose) : null;
-        if (isCorrect === true) {
-          feedback.innerText = "✅ Postura correcta";
-        } else if (isCorrect === false) {
-          feedback.innerText = "❌ Postura incorrecta";
-        } else {
-          feedback.innerText = "🎥 Observando...";
-        }
-
-        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {
-          color: isCorrect ? 'green' : 'red', lineWidth: 2
-        });
-        drawLandmarks(canvasCtx, results.poseLandmarks, {
-          color: '#FF0000', radius: 1.5
-        });
-      }
-
-      canvasCtx.restore();
-    });
+    pose.onResults(onResults);
 
     const camera = new Camera(videoElement, {
       onFrame: async () => {
@@ -142,8 +122,19 @@
       width: 1280,
       height: 720
     });
-
     camera.start();
+
+    recordBtn.addEventListener('click', () => {
+      feedback.innerText = "📸 Postura grabada";
+      recordedPose = null;
+      pose.onResults((results) => {
+        if (results.poseLandmarks) {
+          recordedPose = normalizeLandmarks(results.poseLandmarks);
+          feedback.innerText = "📌 Postura grabada con éxito";
+        }
+        pose.onResults(onResults); // restaura función original
+      });
+    });
   </script>
 </body>
 </html>
