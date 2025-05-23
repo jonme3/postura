@@ -101,7 +101,7 @@
 
         if (posturaGrabada) {
           const diferencia = calcularDiferencia(posturaGrabada, results.poseLandmarks);
-          if (diferencia < 0.001) {
+          if (diferencia < 0.1) {
             estado.innerText = '✅ Postura correcta';
             estado.style.background = 'rgba(0,128,0,0.6)';
           } else {
