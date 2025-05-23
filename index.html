@@ -31,7 +31,7 @@
     canvasElement.width = 1280;
     canvasElement.height = 720;
 
-    const pose = new Pose.Pose({
+    const pose = new Pose({
       locateFile: (file) => {
         return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
       }
@@ -51,7 +51,7 @@
       canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
       if (results.poseLandmarks) {
-        drawConnectors(canvasCtx, results.poseLandmarks, Pose.POSE_CONNECTIONS, {
+        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {
           color: '#00FF00', lineWidth: 2
         });
         drawLandmarks(canvasCtx, results.poseLandmarks, {
