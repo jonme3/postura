@@ -2,61 +2,80 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Postura MediaPipe</title>
+  <title>Pose Tracker</title>
   <style>
-    body { margin: 0; overflow: hidden; font-family: sans-serif; }
+    body { margin: 0; overflow: hidden; }
     video, canvas {
       position: absolute;
       top: 0; left: 0;
       width: 100vw;
       height: 100vh;
-      transform: scaleX(-1);
       object-fit: cover;
+      transform: scaleX(-1);
     }
     #controls {
       position: absolute;
       top: 10px;
       left: 10px;
-      z-index: 10;
-      background: rgba(255, 255, 255, 0.8);
+      background: rgba(255,255,255,0.8);
       padding: 10px;
       border-radius: 8px;
-    }
-    #estado {
-      font-weight: bold;
-      margin-top: 5px;
+      font-family: sans-serif;
     }
   </style>
 </head>
 <body>
   <video id="input_video" autoplay muted playsinline></video>
   <canvas id="output_canvas"></canvas>
-
   <div id="controls">
-    <button id="grabarBtn">Grabar Postura</button>
-    <label>
-      Tolerancia:
-      <input type="range" id="tolerancia" min="0.01" max="0.3" step="0.01" value="0.1">
-    </label>
-    <div id="estado">Esperando...</div>
+    <button id="recordBtn">Grabar postura</button>
+    Tolerancia: <input type="range" id="tolerance" min="0.01" max="0.5" step="0.01" value="0.1">
+    <span id="feedback">Sin comparar</span>
   </div>
 
-  <!-- Scripts MediaPipe -->
+  <!-- MediaPipe clásico -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
   <script>
     const videoElement = document.getElementById('input_video');
     const canvasElement = document.getElementById('output_canvas');
     const canvasCtx = canvasElement.getContext('2d');
-    const estadoElem = document.getElementById('estado');
-    const toleranciaInput = document.getElementById('tolerancia');
-
-    let posturaGrabada = null;
+    const recordBtn = document.getElementById('recordBtn');
+    const toleranceInput = document.getElementById('tolerance');
+    const feedback = document.getElementById('feedback');
 
     canvasElement.width = 1280;
     canvasElement.height = 720;
+
+    let savedPose = null;
+
+    function normalizeLandmarks(landmarks) {
+      // Centro del cuerpo (promedio de caderas o nariz)
+      const center = landmarks[0]; // nariz
+      return landmarks.map(l => ({
+        x: l.x - center.x,
+        y: l.y - center.y
+      }));
+    }
+
+    function comparePostures(current, saved) {
+      if (!current || !saved || current.length !== saved.length) return false;
+      const normCurrent = normalizeLandmarks(current);
+      const normSaved = normalizeLandmarks(saved);
+
+      let totalDiff = 0;
+      for (let i = 0; i < normCurrent.length; i++) {
+        const dx = normCurrent[i].x - normSaved[i].x;
+        const dy = normCurrent[i].y - normSaved[i].y;
+        totalDiff += Math.sqrt(dx * dx + dy * dy);
+      }
+
+      const avgDiff = totalDiff / current.length;
+      const tolerance = parseFloat(toleranceInput.value);
+      return avgDiff < tolerance;
+    }
 
     const pose = new Pose({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/${file}`
@@ -76,18 +95,21 @@
       canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
       if (results.poseLandmarks) {
+        const isCorrect = savedPose ? comparePostures(results.poseLandmarks, savedPose) : null;
+        if (isCorrect === true) {
+          feedback.innerText = "✅ Postura correcta";
+        } else if (isCorrect === false) {
+          feedback.innerText = "❌ Postura incorrecta";
+        } else {
+          feedback.innerText = "🎥 Observando...";
+        }
+
         drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {
-          color: '#00FF00', lineWidth: 2
+          color: isCorrect ? 'green' : 'red', lineWidth: 2
         });
         drawLandmarks(canvasCtx, results.poseLandmarks, {
-          color: '#FF0000', radius: 2
+          color: '#FF0000', radius: 1.5
         });
-
-        if (posturaGrabada) {
-          const diff = calcularDiferencia(posturaGrabada, results.poseLandmarks);
-          const tolerancia = parseFloat(toleranciaInput.value);
-          estadoElem.textContent = diff < tolerancia ? "✔️ Postura Correcta" : "❌ Postura Incorrecta";
-        }
       }
 
       canvasCtx.restore();
@@ -103,53 +125,17 @@
 
     camera.start();
 
-    // Grabar postura al hacer clic
-    document.getElementById('grabarBtn').addEventListener('click', () => {
-      if (lastLandmarks) {
-        posturaGrabada = lastLandmarks.map(p => ({ x: p.x, y: p.y, z: p.z }));
-        estadoElem.textContent = "📸 Postura grabada";
+    recordBtn.onclick = () => {
+      savedPose = lastPose ? structuredClone(lastPose) : null;
+      if (savedPose) {
+        feedback.innerText = "✅ Postura guardada";
       }
-    });
+    };
 
-    // Últimos landmarks detectados
-    let lastLandmarks = null;
-
+    let lastPose = null;
     pose.onResults((results) => {
-      lastLandmarks = results.poseLandmarks;
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-
-      if (results.poseLandmarks) {
-        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {
-          color: '#00FF00', lineWidth: 2
-        });
-        drawLandmarks(canvasCtx, results.poseLandmarks, {
-          color: '#FF0000', radius: 2
-        });
-
-        if (posturaGrabada) {
-          const diff = calcularDiferencia(posturaGrabada, results.poseLandmarks);
-          const tolerancia = parseFloat(toleranciaInput.value);
-          estadoElem.textContent = diff < tolerancia ? "✔️ Postura Correcta" : "❌ Postura Incorrecta";
-        }
-      }
-
-      canvasCtx.restore();
+      lastPose = results.poseLandmarks;
     });
-
-    // Calcular diferencia entre dos posturas
-    function calcularDiferencia(p1, p2) {
-      if (!p1 || !p2 || p1.length !== p2.length) return Infinity;
-      let total = 0;
-      for (let i = 0; i < p1.length; i++) {
-        const dx = p1[i].x - p2[i].x;
-        const dy = p1[i].y - p2[i].y;
-        const dz = (p1[i].z || 0) - (p2[i].z || 0);
-        total += dx * dx + dy * dy + dz * dz;
-      }
-      return Math.sqrt(total / p1.length);
-    }
   </script>
 </body>
 </html>
