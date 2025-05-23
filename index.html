@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Postura MediaPipe</title>
+  <title>Detección de Postura con MediaPipe</title>
   <style>
     body {
       margin: 0;
@@ -23,6 +23,12 @@
   <canvas id="canvas"></canvas>
 
   <script type="module">
+    import {
+      FilesetResolver,
+      DrawingUtils,
+      PoseLandmarker
+    } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+
     window.onload = async () => {
       const video = document.getElementById("video");
       const canvas = document.getElementById("canvas");
@@ -33,13 +39,10 @@
         canvas.height = video.videoHeight;
       }
 
-      const { FilesetResolver, DrawingUtils, PoseLandmarker } = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3");
-
       const vision = await FilesetResolver.forVisionTasks(
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
       );
 
-      // ✅ ESTE modelo sí funciona (no usa storage.googleapis.com)
       const poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
         baseOptions: {
           modelAssetPath: "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/pose_landmarker_lite.task"
